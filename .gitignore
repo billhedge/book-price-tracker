@@ -1,0 +1,39 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets and local config (never commit these)
+.env
+.env.*
+!.env.example
+
+# Build and packaging output
+build/
+dist/
+*.egg-info/
+
+# Test and coverage output
+.coverage
+coverage.xml
+htmlcov/
+
+# Editors and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local cache and temporary files
+*.log
+*.sqlite
+
+# long diff files
+diff.txt
