@@ -1,13 +1,17 @@
 import requests
 
+from booktracker import exceptions as ex
+
 
 def fetch_page(session: requests.Session, url: str, timeout: float = 10) -> str:
-    return ""  # placeholder
-    # TODO: get with timeout; Timeout before ConnectionError -> FetchError ... from e
-    # TODO: non-2xx -> FetchError
-    # TODO: return response.content decoded as UTF-8; UnicodeDecodeError -> FetchError
+    try:
+        response = session.get(url, timeout=timeout)
+    except requests.RequestException as e:
+        raise ex.FetchError(f"Failed to fetch {url}: {e}") from e
+    if not 200 <= response.status_code < 300:
+        raise ex.FetchError(f"HTTP {response.status_code} from {url}")
+    try:
+        return response.content.decode("utf-8")
 
-
-# fetch_page: request with a timeout, catch Timeout before ConnectionError,
-#  raise FetchError on non-2xx, decode the body as UTF-8, and turn UnicodeDecodeError
-#  into FetchError.
+    except UnicodeDecodeError as e:
+        raise ex.FetchError(f"Failed to decode response from {url}") from e
