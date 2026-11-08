@@ -15,11 +15,6 @@ GAP = "  "
 
 
 def format_book(book: Book, widths: tuple[int, int, int, int]) -> str:
-    """
-    format_book(book): one line with fixed-width fields. For example, the ID right-aligned,
-        the price with two decimals, then availability and title. FORMATTING covers the width and
-        alignment syntax.
-    """
     id_w, price_w, avail_w, _ = widths
 
     return GAP.join(

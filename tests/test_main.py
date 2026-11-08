@@ -1,8 +1,10 @@
 from decimal import Decimal
 
+import pytest
 import requests
 
-from booktracker.main import DEFAULT_URL, GAP, Book, build_table, main
+from booktracker.data import Book
+from booktracker.main import DEFAULT_URL, build_table, main
 from fakes import BAD_FIXTURE_NO_ID, GOOD_FIXTURE, FakeSession, RaisingSession
 
 
@@ -62,98 +64,31 @@ def test_empty_booklist(capsys) -> None:
     assert err == "booktracker: No books were found in this page.\n"
 
 
-def _cells_from_row(row: str, columns: tuple[tuple[str, int], ...]) -> list[str]:
-    cells = []
-    start = 0
-
-    for index, (_, width) in enumerate(columns):
-        cells.append(row[start : start + width].strip())
-        start += width
-        if index < len(columns) - 1:
-            start += len(GAP)
-
-    return cells
-
-
-def test_long_title_table_width() -> None:
-    table = build_table([Book(123456, "An unusually long title", Decimal("12.50"), "In stock")])
+@pytest.mark.parametrize(
+    ("books", "expected"),
+    [
+        (
+            [Book(123456, "An unusually long title", Decimal("12.50"), "In stock")],
+            " 123456      12.50  In stock      An unusually long title",
+        ),
+        (
+            [Book(1234567890, "Short Title", Decimal("12.50"), "In stock")],
+            "1234567890      12.50  In stock      Short Title",
+        ),
+        (
+            [Book(123456, "Short Title", Decimal("1200000.50"), "In stock")],
+            " 123456  1200000.50  In stock      Short Title",
+        ),
+        (
+            [Book(123456, "Short Title", Decimal("12.50"), "Totally In stock, man!")],
+            " 123456      12.50  Totally In stock, man!  Short Title",
+        ),
+    ],
+    ids=["long_title", "long_id", "long_price", "long_availability"],
+)
+def test_long_columns_table_width(books, expected) -> None:
+    table = build_table(books)
     header, rule, row = table.splitlines()
 
-    cells = _cells_from_row(
-        row,
-        columns=(
-            ("Book ID", 7),
-            ("Price (£)", 9),
-            ("Availability", 12),
-            ("Title", 23),
-        ),
-    )
-
-    assert len(row) == len(rule)  # this row matches the rule's width
-    assert cells[0].endswith("123456")
-    assert cells[1].endswith("12.50")
-    assert cells[2].startswith("In stock")
-    assert cells[3].startswith("An unusually long title")
-
-
-def test_long_id_table_width() -> None:
-    table = build_table([Book(1234567890, "Short Title", Decimal("12.50"), "In stock")])
-    header, rule, row = table.splitlines()
-
-    cells = _cells_from_row(
-        row,
-        columns=(
-            ("Book ID", 10),
-            ("Price (£)", 9),
-            ("Availability", 12),
-            ("Title", 11),
-        ),
-    )
-
-    assert len(row) == len(rule)  # this row matches the rule's width
-    assert cells[0].endswith("1234567890")  # Book ID: right-aligned
-    assert cells[1].endswith("12.50")  # Price: right-aligned
-    assert cells[2].startswith("In stock")  # Availability: left-aligned
-    assert cells[3].startswith("Short Title")  # Title: left-aligned
-
-
-def test_long_price_table_width() -> None:
-    table = build_table([Book(1234567, "Short Title", Decimal("1200000.50"), "In stock")])
-    header, rule, row = table.splitlines()
-
-    cells = _cells_from_row(
-        row,
-        columns=(
-            ("Book ID", 7),
-            ("Price (£)", 10),
-            ("Availability", 12),
-            ("Title", 11),
-        ),
-    )
-
-    assert len(row) == len(rule)  # this row matches the rule's width
-    assert cells[0].endswith("1234567")  # Book ID: right-aligned
-    assert cells[1].endswith("1200000.50")  # Price: right-aligned
-    assert cells[2].startswith("In stock")  # Availability: left-aligned
-    assert cells[3].startswith("Short Title")  # Title: left-aligned
-
-
-def test_long_availability_table_width() -> None:
-    table = build_table([Book(1234567, "Short Title", Decimal("12.50"), "Totally In stock, man!")])
-    header, rule, row = table.splitlines()
-
-    cells = _cells_from_row(
-        row,
-        columns=(
-            ("Book ID", 7),
-            ("Price (£)", 9),
-            ("Availability", 22),
-            ("Title", 11),
-        ),
-    )
-
-    assert len(row) == len(rule)  # this row matches the rule's width
-    assert cells[0].endswith("1234567")  # Book ID: right-aligned
-    assert cells[1].endswith("12.50")  # Price: right-aligned
-    assert cells[2].startswith("Totally In stock, man!")  # Availability: left-aligned
-    assert cells[3].startswith("Short Title")  # Title: left-aligned
+    assert row == expected
+    assert len(row) == len(rule)
