@@ -21,6 +21,18 @@ def test_success_prints_table(capsys) -> None:
     assert any("Security" in row for row in lines)
 
 
+def test_custom_url_is_fetched(capsys) -> None:
+    session = FakeSession(GOOD_FIXTURE.read_bytes())
+    url = "https://example.com/books"
+    code = main([url], session=session)  # type: ignore[arg-type]
+    out, err = capsys.readouterr()
+
+    assert code == 0
+    assert out
+    assert err == ""
+    assert session.calls == [(url, 10)]
+
+
 def test_fetch_failure_reports_and_returns_1(capsys) -> None:
     session = RaisingSession(requests.Timeout("boom"))
     code = main([], session=session)  # type: ignore[arg-type]
