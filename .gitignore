@@ -37,3 +37,7 @@ Thumbs.db
 
 # long diff files
 diff.txt
+staged_diff.txt
+
+# scratch files
+.scratch.py
