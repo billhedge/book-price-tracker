@@ -1,6 +1,6 @@
 # booktracker
 
-A command-line tool that connects to a single page on books.toscrape.com, a demo website created for scraping practice, parses the page, and prints out a table with the information representing books on that page. The displayed data includes ID, price (in GBP), availability, and title. Built as a learning project covering Python web scraping, error handling, and offline testing.
+A command-line tool that connects to a single page on books.toscrape.com, a demo website created for scraping practice, parses the page, and prints out a table with the information representing books on that page. The displayed data includes ID, price (in GBP), availability, and title. The data is also preserved in a local SQLite database. Built as a learning project covering Python web scraping, error handling, and offline testing.
 
 Table output:
 
@@ -26,6 +26,7 @@ Book ID  Price (£)  Availability  Title
 - Gathers book information scraped from the HTML of a single listing page
 - Prints an aligned table
 - Reports errors in one line with exit code `1`
+- Saves each scrape to a local SQLite database
 
 ## Install
 
@@ -42,12 +43,14 @@ On Windows PowerShell, if activation fails with "running scripts is disabled", r
 
 ## Usage
 
-Usage: `booktracker [URL]`
+Usage: `booktracker [URL] [--db PATH]`
 
+Each run adds a scrape to `booktracker.sqlite` in the current folder unless `--db` provides another path.
 ```bash
 booktracker https://books.toscrape.com/catalogue/category/books/art_25/index.html
 booktracker https://books.toscrape.com/catalogue/category/books/historical_42/index.html
 booktracker https://books.toscrape.com/catalogue/category/books/crime_51/index.html
+booktracker https://books.toscrape.com/catalogue/category/books/historical_42/index.html --db ~/db.sqlite  # Windows: --db c:\temp\books.sqlite
 ```
 Exit codes: `0` success, `1` application error. Check the last one with `echo $?` (PowerShell: `echo $LASTEXITCODE`).
 
@@ -84,9 +87,10 @@ CI runs the same checks on Python 3.10 to 3.13.
 
 ## Design notes
 
-- **Error handling.** Every expected failure derives from `AppError`. `main()` catches it and prints an error message to `stderr`, without the traceback, and exits with code `1`. Anything that isn't an `AppError` is a bug and is not caught, so the traceback will show. There are two groups:
+- **Error handling.** Every expected failure derives from `AppError`. `main()` catches it and prints an error message to `stderr`, without the traceback, and exits with code `1`. Anything that isn't an `AppError` is a bug and is not caught, so the traceback will show. There are three groups:
   - `FetchError`: the page could not be fetched (network errors, HTTP status, and non-UTF-8 body). Trying the request again later may work for network errors.
   - `ParseError`: the page structure could not be parsed due to unexpected changes such as a missing element, a link without an ID, a price that will not parse, or a page with no books.
+  - `StorageError`: the database could not be opened or written.
 - **Injectable HTTP client.** The session is injected in `main(argv, session)` and `fetch_page(session, url)`. Tests pass in `FakeSession`s and nothing is patched.
 - **Retries and timeouts.** Every request has a 10-second timeout. There are no retries.
 - **Data notes.** 
@@ -94,12 +98,16 @@ CI runs the same checks on Python 3.10 to 3.13.
    - Titles come from the link's `title` attribute, because the link text is truncated.
    - Prices are `Decimal`, not `float`.
    - HTTP bodies are explicitly decoded as UTF-8. Stdout is set to UTF-8, so that output is the same in both Windows and Linux.
+- **Storage.**
+   - One prices table for storage, one row per book per scrape.
+   - Prices are stored as text, so the exact value comes back unchanged, including trailing zeros like `23.40`. A `REAL` column would store a float.
+   - Timestamps are ISO 8601 text in UTC. All rows from one run share the same timestamp.
+   - Scrapes are stored prior to display, so a `StorageError` will prevent a table from being displayed.
 - **Offline tests with real data.** Fixtures are responses captured from the live website, via `scripts/capture-fixture.ps1`; the malformed ones used for failure paths are edited copies (one defect per file as noted in an HTML comment at the top of each). The suite runs without a network connection.
 - **Output.** Column widths come from the widest of data or the respective headers, so the table stays aligned whatever the length of the data in each column. Stdout carries only results and stderr carries errors, so piping works.
 
 ## Roadmap
 
-- Milestone 2: store each scrape in SQLite.
 - Milestone 3: compare the latest scrape with the previous one and print price changes.
 
 
