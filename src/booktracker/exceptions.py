@@ -8,3 +8,7 @@ class FetchError(AppError):
 
 class ParseError(AppError):
     """the page isn't shaped the way we expect"""
+
+
+class StorageError(AppError):
+    """unable to store data"""

@@ -1,3 +1,4 @@
+from contextlib import closing
 from decimal import Decimal
 
 import pytest
@@ -5,16 +6,18 @@ import requests
 
 from booktracker.data import Book
 from booktracker.main import DEFAULT_URL, build_table, main
+from booktracker.storage import connect
 from fakes import BAD_FIXTURE_NO_ID, GOOD_FIXTURE, FakeSession, RaisingSession
 
 
-def test_success_prints_table(capsys) -> None:
+def test_success_prints_table(capsys, tmp_path) -> None:
     session = FakeSession(GOOD_FIXTURE.read_bytes())
-
-    code = main([], session=session)  # type: ignore[arg-type]
+    db_path = tmp_path / "x.sqlite"
+    code = main(["--db", str(db_path)], session=session)  # type: ignore[arg-type]
 
     out, err = capsys.readouterr()
     lines = out.splitlines()
+
     assert code == 0
     assert len(lines) == 19  # header + rule + books
     assert err == ""
@@ -22,11 +25,21 @@ def test_success_prints_table(capsys) -> None:
     assert lines[2] == "    925      39.25  In stock      Security"
     assert any("Security" in row for row in lines)
 
+    with closing(connect(db_path)) as cnn:
+        rows = cnn.execute(
+            "SELECT COUNT(*), COUNT(DISTINCT scraped_at), COUNT(DISTINCT url), url FROM prices"
+        )
+        rowcount, distinct_timestamps, distinct_url, scraped_url = rows.fetchone()
+    assert rowcount == 17
+    assert distinct_timestamps == 1
+    assert distinct_url == 1
+    assert scraped_url == DEFAULT_URL
 
-def test_custom_url_is_fetched(capsys) -> None:
+
+def test_custom_url_is_fetched(capsys, tmp_path) -> None:
     session = FakeSession(GOOD_FIXTURE.read_bytes())
     url = "https://example.com/books"
-    code = main([url], session=session)  # type: ignore[arg-type]
+    code = main([url, "--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
 
     assert code == 0
@@ -35,9 +48,9 @@ def test_custom_url_is_fetched(capsys) -> None:
     assert session.calls == [(url, 10)]
 
 
-def test_fetch_failure_reports_and_returns_1(capsys) -> None:
+def test_fetch_failure_reports_and_returns_1(capsys, tmp_path) -> None:
     session = RaisingSession(requests.Timeout("boom"))
-    code = main([], session=session)  # type: ignore[arg-type]
+    code = main(["--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
 
     assert code == 1
@@ -45,9 +58,9 @@ def test_fetch_failure_reports_and_returns_1(capsys) -> None:
     assert err.startswith("booktracker: ")
 
 
-def test_parse_failure_reports_and_returns_1(capsys) -> None:
+def test_parse_failure_reports_and_returns_1(capsys, tmp_path) -> None:
     session = FakeSession(BAD_FIXTURE_NO_ID.read_bytes())
-    code = main([], session=session)  # type: ignore[arg-type]
+    code = main(["--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
 
     assert code == 1
@@ -55,9 +68,9 @@ def test_parse_failure_reports_and_returns_1(capsys) -> None:
     assert err.startswith("booktracker: ")
 
 
-def test_empty_booklist(capsys) -> None:
+def test_empty_booklist(capsys, tmp_path) -> None:
     session = FakeSession(b"<html><body></body></html>")
-    code = main([], session=session)  # type: ignore[arg-type]
+    code = main(["--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
     assert code == 1
     assert out == ""

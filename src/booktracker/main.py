@@ -1,6 +1,8 @@
 import argparse
 import io
 import sys
+from contextlib import closing
+from datetime import datetime, timezone
 
 import requests
 
@@ -8,6 +10,7 @@ import booktracker.exceptions as ex
 from booktracker.data import Book
 from booktracker.network import fetch_page
 from booktracker.parsing import parse_books
+from booktracker.storage import connect, save_scrape
 
 DEFAULT_URL = "https://books.toscrape.com/catalogue/category/books/horror_31/index.html"
 
@@ -64,10 +67,15 @@ def main(argv: list[str] | None = None, session: requests.Session | None = None)
         description="Print the books on a books.toscrape.com listing page.",
     )
     parser.add_argument("url", nargs="?", default=DEFAULT_URL, help="listing page URL")
+    parser.add_argument("--db", default="booktracker.sqlite", help="Local cache file name")
     args = parser.parse_args(argv)
     session = session or requests.Session()
     try:
         books = parse_books(fetch_page(session, args.url))
+        # saving the table before printing
+        scraped_at = datetime.now(timezone.utc).isoformat()
+        with closing(connect(args.db)) as conn:
+            save_scrape(conn, args.url, scraped_at, books)
     except ex.AppError as e:
         print(f"booktracker: {e}", file=sys.stderr)
         return 1
