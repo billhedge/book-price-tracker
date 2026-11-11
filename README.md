@@ -1,6 +1,6 @@
 # booktracker
 
-A command-line tool that connects to a single page on books.toscrape.com, a demo website created for scraping practice, parses the page, and prints out a table with the information representing books on that page. The displayed data includes ID, price (in GBP), availability, and title. The data is also preserved in a local SQLite database. Built as a learning project covering Python web scraping, error handling, and offline testing.
+A command-line tool that connects to a single page on books.toscrape.com, a demo website created for scraping practice, parses the page, and prints out a table with the information representing books on that page. The displayed data includes ID, price (in GBP), availability, and title. The data is also preserved in a local SQLite database. Built as a learning project covering Python web scraping, error handling, and offline testing. It can also compare the two most recent scrapes of a page and list price changes. The demo website's prices do not change, so against the live site, this reports no changes.
 
 Table output:
 
@@ -27,6 +27,7 @@ Book ID  Price (£)  Availability  Title
 - Prints an aligned table
 - Reports errors in one line with exit code `1`
 - Saves each scrape to a local SQLite database
+- Price change checks run from local database
 
 ## Install
 
@@ -43,9 +44,12 @@ On Windows PowerShell, if activation fails with "running scripts is disabled", r
 
 ## Usage
 
-Usage: `booktracker [URL] [--db PATH]`
+Usage: `booktracker [URL] [--db PATH] [--changes]`
 
 Each run adds a scrape to `booktracker.sqlite` in the current folder unless `--db` provides another path.
+
+`--changes` only reads the database and never fetches.
+
 ```bash
 booktracker https://books.toscrape.com/catalogue/category/books/art_25/index.html
 booktracker https://books.toscrape.com/catalogue/category/books/historical_42/index.html
@@ -53,6 +57,36 @@ booktracker https://books.toscrape.com/catalogue/category/books/crime_51/index.h
 booktracker https://books.toscrape.com/catalogue/category/books/historical_42/index.html --db ~/db.sqlite  # Windows: --db c:\temp\books.sqlite
 ```
 Exit codes: `0` success, `1` application error. Check the last one with `echo $?` (PowerShell: `echo $LASTEXITCODE`).
+
+Check for price changes between the two most recent scrapes of the default page:
+
+```bash
+booktracker --changes
+```
+
+Check for price changes between the two most recent scrapes of the Crime category page:
+
+```bash
+booktracker https://books.toscrape.com/catalogue/category/books/crime_51/index.html --changes
+```
+
+When a price changed, each change is one line: ID, old price, new price, and title. Note that this is a simple illustration from a test case.
+
+```text
+430 59.21 -> 75.00 Title 3
+```
+
+When nothing changed:
+
+```text
+No price changes for https://books.toscrape.com/catalogue/category/books/horror_31/index.html.
+```
+
+When there aren't two scrapes yet:
+
+```text
+Need more than one scrape for https://books.toscrape.com/catalogue/category/books/horror_31/index.html to compare.
+```
 
 The application only reads the single URL passed to it (the first page of the *Horror* category is used by default if no URL is passed). If you want more pages of a category to be parsed, you must submit multiple requests using the complete URL to each page. 
 
@@ -103,12 +137,13 @@ CI runs the same checks on Python 3.10 to 3.13.
    - Prices are stored as text, so the exact value comes back unchanged, including trailing zeros like `23.40`. A `REAL` column would store a float.
    - Timestamps are ISO 8601 text in UTC. All rows from one run share the same timestamp.
    - Scrapes are stored prior to display, so a `StorageError` will prevent a table from being displayed.
+- **Price changes.**
+   - `--changes` compares the two most recent scrapes of the URL in the database and does not fetch the page.
+   - Prices are compared as numbers, so `12.5` and `12.50` count as the same price.
+   - Only books present in both scrapes are compared; books added or removed between scrapes are not reported.
+   - The comparison itself (`price_changes`) does no database or output work, so its tests use plain data.
 - **Offline tests with real data.** Fixtures are responses captured from the live website, via `scripts/capture-fixture.ps1`; the malformed ones used for failure paths are edited copies (one defect per file as noted in an HTML comment at the top of each). The suite runs without a network connection.
 - **Output.** Column widths come from the widest of data or the respective headers, so the table stays aligned whatever the length of the data in each column. Stdout carries only results and stderr carries errors, so piping works.
-
-## Roadmap
-
-- Milestone 3: compare the latest scrape with the previous one and print price changes.
 
 
 ## Data and attribution
