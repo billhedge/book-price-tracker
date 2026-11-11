@@ -1,5 +1,6 @@
 import sqlite3
 from collections.abc import Iterable
+from decimal import Decimal
 from pathlib import Path
 
 from booktracker.data import Book
@@ -37,3 +38,33 @@ def save_scrape(conn: sqlite3.Connection, url: str, scraped_at: str, books: Iter
             conn.executemany("INSERT INTO prices VALUES (?, ?, ?, ?, ?, ?)", rows)
     except sqlite3.Error as e:
         raise StorageError(f"Unable to save scrape to db: {e}") from e
+
+
+def latest_timestamps(conn: sqlite3.Connection, url: str) -> list[str]:
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT scraped_at FROM prices WHERE url = ?"
+            "       ORDER BY scraped_at DESC LIMIT 2",
+            (url,),
+        ).fetchall()
+    except sqlite3.Error as e:
+        raise StorageError(f"Unable to load timestamps from db for {url}: {e}") from e
+    return [row[0] for row in rows]
+
+
+def load_scrape(conn: sqlite3.Connection, url: str, scraped_at: str) -> dict[int, Book]:
+    try:
+        rows = conn.execute(
+            "SELECT book_id, title, price, availability FROM prices WHERE url = ?"
+            "       AND scraped_at = ?",
+            (url, scraped_at),
+        ).fetchall()
+    except sqlite3.Error as e:
+        raise StorageError(f"Unable to load scrapes from db for {url} at {scraped_at}: {e}") from e
+
+    books: dict[int, Book] = {}
+
+    for row in rows:
+        books[row[0]] = Book(row[0], row[1], Decimal(row[2]), row[3])
+
+    return books

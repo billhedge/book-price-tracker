@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import requests
 
 import booktracker.exceptions as ex
+from booktracker.changes import check_changes
 from booktracker.data import Book
 from booktracker.network import fetch_page
 from booktracker.parsing import parse_books
@@ -67,15 +68,23 @@ def main(argv: list[str] | None = None, session: requests.Session | None = None)
         description="Print the books on a books.toscrape.com listing page.",
     )
     parser.add_argument("url", nargs="?", default=DEFAULT_URL, help="listing page URL")
-    parser.add_argument("--db", default="booktracker.sqlite", help="Local cache file name")
+    parser.add_argument("--db", default="booktracker.sqlite", help="local cache file name")
+    parser.add_argument("--changes", action="store_true", help="check for price changes")
     args = parser.parse_args(argv)
     session = session or requests.Session()
     try:
+        if args.changes:
+            with closing(connect(args.db)) as conn:
+                formatted_changes = check_changes(conn, url=args.url)
+            for change in formatted_changes:
+                print(change)
+            return 0
         books = parse_books(fetch_page(session, args.url))
         # saving the table before printing
         scraped_at = datetime.now(timezone.utc).isoformat()
         with closing(connect(args.db)) as conn:
             save_scrape(conn, args.url, scraped_at, books)
+
     except ex.AppError as e:
         print(f"booktracker: {e}", file=sys.stderr)
         return 1
