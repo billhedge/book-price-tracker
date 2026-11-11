@@ -4,14 +4,14 @@ from decimal import Decimal
 import pytest
 import requests
 
+import fakes
 from booktracker.data import Book
 from booktracker.main import DEFAULT_URL, build_table, main
-from booktracker.storage import connect
-from fakes import BAD_FIXTURE_NO_ID, GOOD_FIXTURE, FakeSession, RaisingSession
+from booktracker.storage import connect, save_scrape
 
 
 def test_success_prints_table(capsys, tmp_path) -> None:
-    session = FakeSession(GOOD_FIXTURE.read_bytes())
+    session = fakes.FakeSession(fakes.GOOD_FIXTURE.read_bytes())
     db_path = tmp_path / "x.sqlite"
     code = main(["--db", str(db_path)], session=session)  # type: ignore[arg-type]
 
@@ -37,7 +37,7 @@ def test_success_prints_table(capsys, tmp_path) -> None:
 
 
 def test_custom_url_is_fetched(capsys, tmp_path) -> None:
-    session = FakeSession(GOOD_FIXTURE.read_bytes())
+    session = fakes.FakeSession(fakes.GOOD_FIXTURE.read_bytes())
     url = "https://example.com/books"
     code = main([url, "--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
@@ -49,7 +49,7 @@ def test_custom_url_is_fetched(capsys, tmp_path) -> None:
 
 
 def test_fetch_failure_reports_and_returns_1(capsys, tmp_path) -> None:
-    session = RaisingSession(requests.Timeout("boom"))
+    session = fakes.RaisingSession(requests.Timeout("boom"))
     code = main(["--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
 
@@ -59,7 +59,7 @@ def test_fetch_failure_reports_and_returns_1(capsys, tmp_path) -> None:
 
 
 def test_parse_failure_reports_and_returns_1(capsys, tmp_path) -> None:
-    session = FakeSession(BAD_FIXTURE_NO_ID.read_bytes())
+    session = fakes.FakeSession(fakes.BAD_FIXTURE_NO_ID.read_bytes())
     code = main(["--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
 
@@ -69,7 +69,7 @@ def test_parse_failure_reports_and_returns_1(capsys, tmp_path) -> None:
 
 
 def test_empty_booklist(capsys, tmp_path) -> None:
-    session = FakeSession(b"<html><body></body></html>")
+    session = fakes.FakeSession(b"<html><body></body></html>")
     code = main(["--db", str(tmp_path / "x.sqlite")], session=session)  # type: ignore[arg-type]
     out, err = capsys.readouterr()
     assert code == 1
@@ -105,3 +105,31 @@ def test_long_columns_table_width(books, expected) -> None:
 
     assert row == expected
     assert len(row) == len(rule)
+
+
+def test_changes_flag_reports_change(capsys, tmp_path) -> None:
+    db_path = tmp_path / "x.sqlite"
+    with closing(connect(db_path)) as conn:
+        save_scrape(conn, DEFAULT_URL, "2026-11-10T00:00:00+00:00", fakes.BOOKS1)
+        save_scrape(conn, DEFAULT_URL, "2026-11-10T01:00:00+00:00", fakes.BOOKS_UP)
+    session = fakes.FakeSession()
+
+    code = main(["--changes", "--db", str(db_path)], session=session)  # type: ignore[arg-type]
+
+    out, err = capsys.readouterr()
+
+    assert session.calls == []  # proves --changes never fetched
+    assert code == 0
+    assert out.splitlines() == ["430 59.21 -> 75.00 Title 3"]
+    assert err == ""
+
+
+def test_empty_db(capsys):
+    session = fakes.FakeSession()
+    code = main(["--changes", "--db", ":memory:"], session=session)  # type: ignore[arg-type]
+    out, err = capsys.readouterr()
+
+    assert session.calls == []  # proves --changes never fetched
+    assert code == 0
+    assert out.splitlines() == [f"Need more than one scrape for {DEFAULT_URL} to compare."]
+    assert err == ""
