@@ -65,11 +65,25 @@ def main(argv: list[str] | None = None, session: requests.Session | None = None)
 
     parser = argparse.ArgumentParser(
         prog="booktracker",
-        description="Print the books on a books.toscrape.com listing page.",
+        description=(
+            "Saves and displays book information from a books.toscrape.com listing page."
+            " Also checks for price changes between scrapes."
+        ),
     )
-    parser.add_argument("url", nargs="?", default=DEFAULT_URL, help="listing page URL")
-    parser.add_argument("--db", default="booktracker.sqlite", help="local cache file name")
-    parser.add_argument("--changes", action="store_true", help="check for price changes")
+    parser.add_argument(
+        "url", nargs="?", default=DEFAULT_URL, help="books.toscrape.com listing page URL"
+    )
+    parser.add_argument(
+        "--db",
+        default="booktracker.sqlite",
+        help="SQLite database file (default: %(default)s)",
+        metavar="PATH",
+    )
+    parser.add_argument(
+        "--changes",
+        action="store_true",
+        help="show price changes between the two most recent scrapes",
+    )
     args = parser.parse_args(argv)
     session = session or requests.Session()
     try:
